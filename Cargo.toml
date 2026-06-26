@@ -1,0 +1,36 @@
+[package]
+name = "rsomics-boschloo-exact"
+version = "0.1.0"
+description = "Boschloo's 2x2 unconditional exact test (uniformly more powerful than Fisher's exact) — scipy.stats.boschloo_exact equivalent, value-exact"
+edition = "2024"
+rust-version = "1.91"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/omics-rust/rsomics-boschloo-exact"
+authors = ["Zane Leong <efd@live.com>"]
+categories = ["science", "command-line-utilities"]
+keywords = ["statistics", "boschloo", "exact-test", "contingency", "scipy"]
+readme = "README.md"
+
+[[bin]]
+name = "rsomics-boschloo-exact"
+path = "src/main.rs"
+
+[lib]
+name = "rsomics_boschloo_exact"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+rsomics-common = "0.6"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+libm = "0.2"
+ryu = "1"
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+tempfile = "3"
+
+[[bench]]
+name = "boschloo"
+harness = false
