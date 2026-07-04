@@ -28,6 +28,13 @@ fn ln_pmf(k: i64, m: u64, n: u64, big_n: u64) -> f64 {
 /// built by one ascending cumulative sum of the PMF. The support runs from
 /// `max(0, N - (M - n))` to `min(n, N)`; the ascending summation order
 /// reproduces `scipy.stats.hypergeom.cdf` to ~1e-13. `out[k]` is `P(X <= k)`.
+///
+/// At and beyond the top of the support the CDF is exactly 1 — the whole
+/// distribution's mass — so it is set to `1.0` there rather than left as the
+/// forward sum's `1 - O(eps)`. This matches `scipy.stats.hypergeom.cdf` bit for
+/// bit at the boundary, which Boschloo's index-set threshold relies on: when the
+/// observed table is the least extreme, its statistic must read as exactly 1 so
+/// every tied top-of-support table stays inside the index set.
 pub fn cdf_row(k_max: i64, m: u64, n: u64, big_n: u64, out: &mut [f64]) {
     let support_lo = ((big_n as i64) - (m as i64 - n as i64)).max(0);
     let support_hi = (n as i64).min(big_n as i64);
@@ -37,7 +44,7 @@ pub fn cdf_row(k_max: i64, m: u64, n: u64, big_n: u64, out: &mut [f64]) {
         if (support_lo..=support_hi).contains(&k) {
             acc += ln_pmf(k, m, n, big_n).exp();
         }
-        *slot = acc.min(1.0);
+        *slot = if k >= support_hi { 1.0 } else { acc.min(1.0) };
     }
 }
 

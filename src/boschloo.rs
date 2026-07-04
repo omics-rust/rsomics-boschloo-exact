@@ -11,7 +11,10 @@
 //! Everything is carried in log space (`lgamma` combinations, log-sum-exp
 //! reduction) exactly as SciPy does. The nuisance maximisation scans a grid for
 //! candidate basins and golden-section refines each — the objective is
-//! multimodal, so refining only the global seed minimum would be unsafe.
+//! multimodal, so refining only the global seed minimum would be unsafe. The one
+//! case the maximiser cannot resolve is a flat objective identically equal to 1
+//! (the observed table least extreme, so every table is in-index); that is
+//! detected up front and returns exactly 1.
 
 use libm::lgamma;
 use rsomics_common::{Result, RsomicsError};
@@ -219,13 +222,25 @@ fn one_sided(a: u64, b: u64, c: u64, d: u64, alt: Alternative) -> (f64, f64) {
     // Group the in-index tables by s = x1 + x2 via per-s log-sum-exp of their
     // log-combination, so the nuisance objective costs O(N) per evaluation.
     let mut log_coeff = vec![f64::NEG_INFINITY; total as usize + 1];
+    let mut in_index = 0usize;
     for x2 in 0..=total_col_2 as usize {
         for x1 in 0..=total_col_1 as usize {
             if pvalues[x2 * ncol + x1] <= threshold {
+                in_index += 1;
                 let s = x1 + x2;
                 log_coeff[s] = log_add_exp(log_coeff[s], c1[x1] + c2[x2]);
             }
         }
+    }
+
+    // When the observed table is the least extreme in the tested tail, every
+    // table enters the index set. The grouped coefficients then reduce (by
+    // Vandermonde) to C(N, s), so the nuisance objective is the full binomial
+    // sum_s C(N,s) pi^s (1-pi)^(N-s) = (pi + (1-pi))^N = 1 for every pi. The true
+    // maximum is exactly 1; the grid/refine maximiser only reaches a noise floor
+    // just below it on this flat objective, so short-circuit to the exact value.
+    if in_index == nrow * ncol {
+        return (fisher_stat, 1.0);
     }
     let terms: Vec<(u32, f64)> = log_coeff
         .iter()
@@ -325,5 +340,32 @@ mod tests {
     fn degenerate_column_is_nan() {
         let r = boschloo(0, 5, 0, 4, Alternative::TwoSided).unwrap();
         assert!(r.statistic.is_nan() && r.pvalue.is_nan());
+    }
+
+    // Zero-cell tables where the observed table is the least extreme in the
+    // tested tail: every table enters the index set, the nuisance objective is
+    // identically 1, so both the Fisher statistic and the p-value are exactly 1.
+    // scipy.stats.boschloo_exact returns 1.0 here; the grid maximiser used to
+    // report a ~0.995 noise floor instead.
+    #[test]
+    fn least_extreme_zero_cell_is_exactly_one() {
+        for &(a, b, c, d) in &[(450, 1, 450, 0), (500, 1, 500, 0), (300, 2, 300, 0)] {
+            let r = boschloo(a, b, c, d, Alternative::Greater).unwrap();
+            assert_eq!(r.statistic, 1.0, "statistic for {a},{b},{c},{d}");
+            assert_eq!(r.pvalue, 1.0, "pvalue for {a},{b},{c},{d}");
+        }
+    }
+
+    // The exact-1 short-circuit fires only on the genuinely-1 side, so the
+    // two-sided value (twice the smaller one-sided p) is untouched.
+    #[test]
+    fn two_sided_unaffected_by_short_circuit() {
+        // scipy.stats.boschloo_exact([[300,2],[300,0]], 'two-sided') -> p 0.3005...
+        let r = boschloo(300, 2, 300, 0, Alternative::TwoSided).unwrap();
+        let g = boschloo(300, 2, 300, 0, Alternative::Greater).unwrap();
+        let l = boschloo(300, 2, 300, 0, Alternative::Less).unwrap();
+        let expected = (2.0 * g.pvalue.min(l.pvalue)).clamp(0.0, 1.0);
+        assert!((r.pvalue - expected).abs() <= 1e-15);
+        assert!(r.pvalue < 1.0, "two-sided should not be forced to 1");
     }
 }

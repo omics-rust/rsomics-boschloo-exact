@@ -1,6 +1,6 @@
 [package]
 name = "rsomics-boschloo-exact"
-version = "0.1.0"
+version = "0.1.1"
 description = "Boschloo's 2x2 unconditional exact test (uniformly more powerful than Fisher's exact) — scipy.stats.boschloo_exact equivalent, value-exact"
 edition = "2024"
 rust-version = "1.91"
